@@ -276,11 +276,20 @@ body {
     gap: 1rem;
     align-items: flex-end;
 }
-
 .form-group label {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-color);
+    margin-bottom: 0.3rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 0.8rem;
+    width: 100%;
 }
 
 .form-group input,

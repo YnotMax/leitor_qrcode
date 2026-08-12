@@ -33,7 +33,9 @@ const btnClear = document.getElementById('btn-clear');
 const searchInput = document.getElementById('search-input');
 
 // Elementos do Formulário Atual
-const inputQr = document.getElementById('current-qr');
+const inputPatrimonio = document.getElementById('current-patrimonio');
+const inputModelo = document.getElementById('current-modelo');
+const inputSerie = document.getElementById('current-serie');
 const inputEan = document.getElementById('current-ean');
 const inputObs = document.getElementById('current-obs');
 const inputQty = document.getElementById('current-qty');
@@ -187,15 +189,63 @@ function onScanSuccess(decodedText, decodedResult) {
     lastScannedText = decodedText;
     lastScanTime = now;
     
-    const formatName = decodedResult?.result?.format?.formatName || '';
+    // =========================================
+    // PARSER INTELIGENTE DE CÓDIGOS DE BARRAS
+    // =========================================
     
-    if (formatName === 'QR_CODE') {
-        inputQr.value = decodedText;
-        feedbackText.innerText = 'QR Code capturado!';
-    } else {
+    let typeFound = 'Código capturado!';
+    
+    // 1. Regra Patrimônio (ex: 035.03.232)
+    const patrimonioRegex = /^\\d{3}\\.\\d{2}\\.\\d{3}$/;
+    
+    // 2. Regra EAN (13 dígitos)
+    const eanRegex = /^\\d{13}$/;
+    
+    // 3. Regra Consul / Código Composto (ex: CRC08CBANAJJ6584955E3)
+    // Modelo costuma ter 10 chars, série tem 9 chars. Total = 19 a 21 chars.
+    const consulRegex = /^(CRC[A-Z0-9]{7})([A-Z0-9]{9})(.*)$/i;
+    
+    // 4. Regra Elgin - Série (começa com ARC)
+    const elginSerieRegex = /^ARC\\d+$/i;
+    
+    // 5. Regra Elgin - Modelo (começa com KVF, etc)
+    const elginModeloRegex = /^KVF[A-Z0-9]+$/i;
+
+    if (patrimonioRegex.test(decodedText)) {
+        inputPatrimonio.value = decodedText;
+        typeFound = 'QR Code de Patrimônio lido!';
+        
+    } else if (consulRegex.test(decodedText)) {
+        const match = decodedText.match(consulRegex);
+        inputModelo.value = match[1]; // Modelo
+        inputSerie.value = match[2];  // Série
+        // match[3] seria o lote/sufixo, podemos por na obs
+        if (match[3]) {
+            const currentObs = inputObs.value;
+            inputObs.value = currentObs ? currentObs + ' / Lote: ' + match[3] : 'Lote: ' + match[3];
+        }
+        typeFound = 'Modelo e Série Consul identificados!';
+        
+    } else if (elginSerieRegex.test(decodedText)) {
+        inputSerie.value = decodedText;
+        typeFound = 'Série Elgin identificada!';
+        
+    } else if (elginModeloRegex.test(decodedText)) {
+        inputModelo.value = decodedText;
+        typeFound = 'Modelo Elgin identificado!';
+        
+    } else if (eanRegex.test(decodedText)) {
         inputEan.value = decodedText;
-        feedbackText.innerText = 'Código de Barras capturado!';
+        typeFound = 'EAN lido!';
+        
+    } else {
+        // Fallback: se não se encaixa nas regras, joga na observação para o usuário decidir
+        const currentObs = inputObs.value;
+        inputObs.value = currentObs ? currentObs + ' / Código genérico lido: ' + decodedText : 'Lido: ' + decodedText;
+        typeFound = 'Código desconhecido (jogado na Observação)';
     }
+    
+    feedbackText.innerText = typeFound;
     
     playBeepSound();
     showFeedback();
@@ -269,7 +319,9 @@ function saveItems() {
 }
 
 function resetForm() {
-    inputQr.value = '';
+    inputPatrimonio.value = '';
+    inputModelo.value = '';
+    inputSerie.value = '';
     inputEan.value = '';
     inputObs.value = '';
     inputQty.value = '1';
@@ -285,7 +337,9 @@ function editItem(id) {
     if (!item) return;
     
     editingItemId = id;
-    inputQr.value = item.qr || '';
+    inputPatrimonio.value = item.patrimonio || '';
+    inputModelo.value = item.modelo || '';
+    inputSerie.value = item.serie || '';
     inputEan.value = item.ean || '';
     inputObs.value = item.obs || '';
     inputQty.value = item.quantity || 1;
@@ -299,13 +353,15 @@ function editItem(id) {
 }
 
 function saveCurrentItem() {
-    const qr = inputQr.value.trim();
+    const patrimonio = inputPatrimonio.value.trim();
+    const modelo = inputModelo.value.trim();
+    const serie = inputSerie.value.trim();
     const ean = inputEan.value.trim();
     const obs = inputObs.value.trim();
     const qty = parseInt(inputQty.value) || 1;
     
-    if (!qr && !ean) {
-        alert("Por favor, preencha o QR Code ou o Código de Barras antes de adicionar à lista.");
+    if (!patrimonio && !modelo && !serie && !ean) {
+        alert("Por favor, preencha pelo menos um campo de código (Patrimônio, Modelo, Série ou EAN) antes de adicionar à lista.");
         return;
     }
     
@@ -313,7 +369,9 @@ function saveCurrentItem() {
         // Modo Edição de Item existente
         const itemIndex = scannedItems.findIndex(i => i.id === editingItemId);
         if (itemIndex >= 0) {
-            scannedItems[itemIndex].qr = qr;
+            scannedItems[itemIndex].patrimonio = patrimonio;
+            scannedItems[itemIndex].modelo = modelo;
+            scannedItems[itemIndex].serie = serie;
             scannedItems[itemIndex].ean = ean;
             scannedItems[itemIndex].obs = obs;
             scannedItems[itemIndex].quantity = qty;
@@ -321,27 +379,46 @@ function saveCurrentItem() {
         feedbackText.innerText = 'Produto atualizado!';
     } else {
         // Modo Novo Item
-        const existingIndex = scannedItems.findIndex(item => 
-            (qr && item.qr === qr) || (ean && item.ean === ean)
-        );
-        
-        if (existingIndex >= 0 && !obs) {
-            scannedItems[existingIndex].quantity += qty;
-            if (qr && !scannedItems[existingIndex].qr) scannedItems[existingIndex].qr = qr;
-            if (ean && !scannedItems[existingIndex].ean) scannedItems[existingIndex].ean = ean;
-            
-            const item = scannedItems.splice(existingIndex, 1)[0];
-            scannedItems.unshift(item);
-        } else {
-            const newItem = {
+        // Checagem inteligente: se tem número de série, NÃO acumula quantidade.
+        if (serie || patrimonio) {
+             const newItem = {
                 id: Date.now().toString(),
-                qr: qr,
+                patrimonio: patrimonio,
+                modelo: modelo,
+                serie: serie,
                 ean: ean,
                 obs: obs,
-                quantity: qty,
+                quantity: qty, // Deveria ser 1 na maioria das vezes, mas deixa o usuário forçar se quiser.
                 timestamp: new Date().toLocaleString('pt-BR')
             };
             scannedItems.unshift(newItem);
+        } else {
+            // Se NÃO tiver série ou patrimonio, tenta agrupar itens genéricos
+            const existingIndex = scannedItems.findIndex(item => 
+                (modelo && item.modelo === modelo) || (ean && item.ean === ean)
+            );
+            
+            if (existingIndex >= 0 && !obs && !item.serie && !item.patrimonio) {
+                // Se achou modelo idêntico e nenhum deles tem série/patrimonio
+                scannedItems[existingIndex].quantity += qty;
+                if (modelo && !scannedItems[existingIndex].modelo) scannedItems[existingIndex].modelo = modelo;
+                if (ean && !scannedItems[existingIndex].ean) scannedItems[existingIndex].ean = ean;
+                
+                const item = scannedItems.splice(existingIndex, 1)[0];
+                scannedItems.unshift(item);
+            } else {
+                const newItem = {
+                    id: Date.now().toString(),
+                    patrimonio: patrimonio,
+                    modelo: modelo,
+                    serie: serie,
+                    ean: ean,
+                    obs: obs,
+                    quantity: qty,
+                    timestamp: new Date().toLocaleString('pt-BR')
+                };
+                scannedItems.unshift(newItem);
+            }
         }
         feedbackText.innerText = 'Produto adicionado!';
     }
@@ -395,7 +472,9 @@ function renderList() {
     
     if (filterTerm) {
         filteredItems = scannedItems.filter(item => 
-            (item.qr && item.qr.toLowerCase().includes(filterTerm)) ||
+            (item.patrimonio && item.patrimonio.toLowerCase().includes(filterTerm)) ||
+            (item.modelo && item.modelo.toLowerCase().includes(filterTerm)) ||
+            (item.serie && item.serie.toLowerCase().includes(filterTerm)) ||
             (item.ean && item.ean.toLowerCase().includes(filterTerm)) ||
             (item.obs && item.obs.toLowerCase().includes(filterTerm))
         );
@@ -416,8 +495,14 @@ function renderList() {
             li.className = 'list-item';
             
             let codesHtml = '';
-            if (item.qr) {
-                codesHtml += `<div class="item-code"><i class="fa-solid fa-qrcode" style="width: 18px; color: var(--primary-light);"></i> ${item.qr}</div>`;
+            if (item.patrimonio) {
+                codesHtml += `<div class="item-code" style="color: #0369a1;"><i class="fa-solid fa-tag" style="width: 18px;"></i> ${item.patrimonio}</div>`;
+            }
+            if (item.modelo) {
+                codesHtml += `<div class="item-code"><strong style="color: var(--text-light); font-size: 0.8rem; font-family: Inter;">Mod:</strong> ${item.modelo}</div>`;
+            }
+            if (item.serie) {
+                codesHtml += `<div class="item-code"><strong style="color: var(--text-light); font-size: 0.8rem; font-family: Inter;">SN:</strong> ${item.serie}</div>`;
             }
             if (item.ean) {
                 codesHtml += `<div class="item-code"><i class="fa-solid fa-barcode" style="width: 18px; color: var(--primary-light);"></i> ${item.ean}</div>`;
@@ -425,7 +510,7 @@ function renderList() {
             
             let obsHtml = '';
             if (item.obs) {
-                obsHtml = `<div class="item-obs" style="font-size: 0.85rem; color: var(--text-light); margin-top: 0.2rem;"><i class="fa-regular fa-comment-dots" style="width: 18px;"></i> ${item.obs}</div>`;
+                obsHtml = `<div class="item-obs" style="font-size: 0.85rem; color: var(--text-light); margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border-color);"><i class="fa-regular fa-comment-dots" style="width: 18px;"></i> ${item.obs}</div>`;
             }
             
             li.innerHTML = `
@@ -440,12 +525,14 @@ function renderList() {
                         <span class="item-quantity">${item.quantity}</span>
                         <button class="btn-qty" onclick="updateQuantity('${item.id}', 1)">+</button>
                     </div>
-                    <button class="btn-item-action" onclick="editItem('${item.id}')" title="Editar item">
-                        <i class="fa-solid fa-pen-to-square"></i>
-                    </button>
-                    <button class="btn-item-action danger" onclick="removeItem('${item.id}')" title="Remover item">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
+                    <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                        <button class="btn-item-action" onclick="editItem('${item.id}')" title="Editar item">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                        </button>
+                        <button class="btn-item-action danger" onclick="removeItem('${item.id}')" title="Remover item">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             `;
             itemsListEl.appendChild(li);
@@ -473,14 +560,16 @@ function exportCSV() {
         return;
     }
     
-    let csvContent = "QR Code,EAN/Código de Barras,Observação,Quantidade,Data/Hora\n";
+    let csvContent = "Patrimônio,Modelo,Nº Série,EAN,Observação,Quantidade,Data/Hora\n";
     
     scannedItems.forEach(item => {
-        let safeQr = item.qr ? item.qr.replace(/"/g, '""') : '';
+        let safePat = item.patrimonio ? item.patrimonio.replace(/"/g, '""') : '';
+        let safeMod = item.modelo ? item.modelo.replace(/"/g, '""') : '';
+        let safeSer = item.serie ? item.serie.replace(/"/g, '""') : '';
         let safeEan = item.ean ? item.ean.replace(/"/g, '""') : '';
         let safeObs = item.obs ? item.obs.replace(/"/g, '""') : '';
         
-        csvContent += `"${safeQr}","${safeEan}","${safeObs}",${item.quantity},"${item.timestamp}"\n`;
+        csvContent += `"${safePat}","${safeMod}","${safeSer}","${safeEan}","${safeObs}",${item.quantity},"${item.timestamp}"\n`;
     });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -504,7 +593,9 @@ function copyToClipboard() {
     let textContent = "INVENTÁRIO DE PRODUTOS\n---------------------\n";
     scannedItems.forEach((item, index) => {
         textContent += `${index + 1}. Qtd: ${item.quantity}\n`;
-        if (item.qr) textContent += `   QR: ${item.qr}\n`;
+        if (item.patrimonio) textContent += `   Patrimônio: ${item.patrimonio}\n`;
+        if (item.modelo) textContent += `   Modelo: ${item.modelo}\n`;
+        if (item.serie) textContent += `   Série: ${item.serie}\n`;
         if (item.ean) textContent += `   EAN: ${item.ean}\n`;
         if (item.obs) textContent += `   Obs: ${item.obs}\n`;
         textContent += `\n`;

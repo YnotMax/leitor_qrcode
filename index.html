@@ -55,18 +55,29 @@
                 <p class="form-hint">Aponte a câmera para preencher os campos abaixo:</p>
                 
                 <div class="form-group">
-                    <label for="current-qr">QR Code</label>
-                    <input type="text" id="current-qr" placeholder="Escaneie ou digite...">
+                    <label for="current-patrimonio"><i class="fa-solid fa-tag"></i> Patrimônio (QR)</label>
+                    <input type="text" id="current-patrimonio" placeholder="Ex: 035.03.232">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="current-modelo">Modelo</label>
+                        <input type="text" id="current-modelo" placeholder="Ex: CRC08CBANA">
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="current-serie">Nº Série</label>
+                        <input type="text" id="current-serie" placeholder="Ex: ARC112500168435">
+                    </div>
                 </div>
                 
                 <div class="form-group">
-                    <label for="current-ean">Cód. Barras (EAN/UPC)</label>
-                    <input type="text" id="current-ean" placeholder="Escaneie ou digite...">
+                    <label for="current-ean"><i class="fa-solid fa-barcode"></i> Cód. Barras (EAN)</label>
+                    <input type="text" id="current-ean" placeholder="Ex: 7891129224049">
                 </div>
                 
                 <div class="form-group">
-                    <label for="current-obs">Observação</label>
-                    <textarea id="current-obs" rows="2" placeholder="Ex: cor, lote, avaria..."></textarea>
+                    <label for="current-obs"><i class="fa-regular fa-comment"></i> Observação</label>
+                    <textarea id="current-obs" rows="1" placeholder="Lote, avaria, caixa, etc..."></textarea>
                 </div>
                 
                 <div class="form-row">
