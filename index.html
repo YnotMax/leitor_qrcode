@@ -16,6 +16,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <!-- Camada de Feedback Visual (Flash Verde nas Bordas) -->
+    <div id="screen-flash-overlay"></div>
+
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
@@ -34,6 +37,9 @@
                 </button>
                 <button id="btn-toggle-flash" class="btn btn-secondary" disabled title="Lanterna">
                     <i class="fa-solid fa-bolt"></i> Flash
+                </button>
+                <button id="btn-switch-camera" class="btn btn-secondary" disabled title="Trocar Câmera">
+                    <i class="fa-solid fa-camera-rotate"></i> Câmera
                 </button>
                 <button id="btn-toggle-sound" class="btn btn-secondary" title="Sinal Sonoro">
                     <i class="fa-solid fa-volume-high" id="sound-icon"></i> Som

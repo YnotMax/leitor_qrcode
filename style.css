@@ -209,6 +209,24 @@ body {
     color: var(--danger-color);
 }
 
+/* Visual Feedback Flash (Bordas da Tela) */
+#screen-flash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: inset 0 0 0 8px #10b981, inset 0 0 30px rgba(16, 185, 129, 0.7);
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+}
+
+#screen-flash-overlay.active {
+    opacity: 1;
+}
+
 /* Feedback message */
 .feedback-message {
     background-color: #d1fae5;

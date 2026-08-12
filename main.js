@@ -5,12 +5,15 @@ let isScanning = false;
 let isFlashlightOn = false;
 let isSoundEnabled = true;
 let currentCameraId = null;
+let availableRearCameras = [];
+let currentCameraIndex = 0;
 let scannedItems = [];
 let editingItemId = null; // Guardar ID quando estiver editando um item existente
 
 // Prevenir leituras repetidas e frenéticas do mesmo código
 let lastScannedText = '';
 let lastScanTime = 0;
+let isCoolingDown = false; // Bloqueio global de 2s após leitura
 
 // Contexto de Áudio Web para Beep Sonoro
 let audioCtx = null;
@@ -19,10 +22,12 @@ let audioCtx = null;
 const btnToggleScanner = document.getElementById('btn-toggle-scanner');
 const toggleScannerText = document.getElementById('toggle-scanner-text');
 const btnToggleFlash = document.getElementById('btn-toggle-flash');
+const btnSwitchCamera = document.getElementById('btn-switch-camera');
 const btnToggleSound = document.getElementById('btn-toggle-sound');
 const soundIcon = document.getElementById('sound-icon');
 const scanFeedback = document.getElementById('scan-feedback');
 const feedbackText = document.getElementById('feedback-text');
+const screenFlashOverlay = document.getElementById('screen-flash-overlay');
 
 const itemsListEl = document.getElementById('items-list');
 const totalCountEl = document.getElementById('total-count');
@@ -55,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function setupEventListeners() {
     btnToggleScanner.addEventListener('click', toggleScanner);
     btnToggleFlash.addEventListener('click', toggleFlashlight);
+    btnSwitchCamera.addEventListener('click', switchCamera);
     btnToggleSound.addEventListener('click', toggleSound);
     btnExport.addEventListener('click', exportCSV);
     btnCopy.addEventListener('click', copyToClipboard);
@@ -125,18 +131,48 @@ async function startScanner() {
         }
 
         const config = { 
-            fps: 10, 
-            qrbox: { width: 250, height: 250 },
+            fps: 20, 
+            qrbox: { width: 300, height: 150 },
             aspectRatio: 1.0,
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39
+            ]
         };
 
         const devices = await Html5Qrcode.getCameras();
         if (devices && devices.length) {
-            currentCameraId = devices.length > 1 ? devices[devices.length - 1].id : devices[0].id;
+            // Filtrar apenas câmeras traseiras (descartando frontal/user)
+            availableRearCameras = devices.filter(d => {
+                const label = (d.label || '').toLowerCase();
+                return !label.includes('front') && !label.includes('user') && !label.includes('selfie');
+            });
+
+            if (availableRearCameras.length === 0) {
+                availableRearCameras = devices; // Fallback
+            }
+
+            // Habilitar botão de alternar câmera se houver mais de uma
+            btnSwitchCamera.disabled = (availableRearCameras.length <= 1);
+
+            // Selecionar câmera principal (1x) evitando ultrawide/0.5x na escolha inicial
+            if (!currentCameraId) {
+                const mainCam = availableRearCameras.find(d => {
+                    const l = (d.label || '').toLowerCase();
+                    return (l.includes('back') || l.includes('rear') || l.includes('0') || l.includes('main')) && 
+                           !l.includes('ultra') && !l.includes('wide-angle') && !l.includes('0.5');
+                });
+                
+                const selected = mainCam || availableRearCameras[0];
+                currentCameraId = selected.id;
+                currentCameraIndex = availableRearCameras.findIndex(d => d.id === currentCameraId);
+                if (currentCameraIndex < 0) currentCameraIndex = 0;
+            }
             
             await html5QrCode.start(
-                { facingMode: "environment" }, 
+                currentCameraId ? { deviceId: { exact: currentCameraId } } : { facingMode: "environment" }, 
                 config, 
                 onScanSuccess, 
                 onScanFailure
@@ -155,6 +191,18 @@ async function startScanner() {
     } catch (err) {
         console.error("Erro ao iniciar a câmera", err);
         alert('Erro ao acessar a câmera. Verifique as permissões. Detalhes: ' + err);
+    }
+}
+
+async function switchCamera() {
+    if (availableRearCameras.length <= 1) return;
+    
+    currentCameraIndex = (currentCameraIndex + 1) % availableRearCameras.length;
+    currentCameraId = availableRearCameras[currentCameraIndex].id;
+    
+    if (isScanning) {
+        await stopScanner();
+        await startScanner();
     }
 }
 
@@ -180,6 +228,8 @@ async function stopScanner() {
 }
 
 function onScanSuccess(decodedText, decodedResult) {
+    if (isCoolingDown) return;
+
     const now = Date.now();
     // Debounce de 1.5s para o exato mesmo código
     if (decodedText === lastScannedText && (now - lastScanTime) < 1500) {
@@ -270,37 +320,62 @@ function onScanSuccess(decodedText, decodedResult) {
     if (navigator.vibrate) {
         navigator.vibrate(100);
     }
+
+    // Ativar o Cooldown Global de 2 segundos
+    isCoolingDown = true;
+    
+    // Feedback visual do cooldown no leitor
+    const readerEl = document.getElementById('reader');
+    if (readerEl) readerEl.style.opacity = '0.5';
+
+    setTimeout(() => {
+        isCoolingDown = false;
+        if (readerEl) readerEl.style.opacity = '1';
+    }, 2000);
 }
 
 function onScanFailure(error) {
     // Ignorar falhas normais a cada frame
 }
 
-// --- Funções da Lanterna ---
-async function checkFlashlightSupport() {
-    try {
-        const stream = html5QrCode._localMediaStream;
-        if (stream) {
-            const track = stream.getVideoTracks()[0];
-            const capabilities = track.getCapabilities();
-            if (capabilities.torch) {
-                btnToggleFlash.disabled = false;
-            } else {
-                btnToggleFlash.disabled = true;
-            }
-        }
-    } catch (err) {
-        console.warn("Não foi possível verificar suporte à lanterna", err);
+// --- Funções da Lanterna (Nativa) ---
+function getActiveVideoTrack() {
+    const videoEl = document.querySelector('#reader video');
+    if (videoEl && videoEl.srcObject) {
+        const tracks = videoEl.srcObject.getVideoTracks();
+        if (tracks && tracks.length) return tracks[0];
     }
+    return null;
+}
+
+async function checkFlashlightSupport() {
+    setTimeout(async () => {
+        try {
+            const track = getActiveVideoTrack();
+            if (track) {
+                const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+                if (capabilities.torch !== undefined) {
+                    btnToggleFlash.disabled = !capabilities.torch;
+                } else {
+                    // Se o navegador não informa suporte explicitamente, habilita o botão para permitir a tentativa
+                    btnToggleFlash.disabled = false;
+                }
+            } else {
+                btnToggleFlash.disabled = false;
+            }
+        } catch (err) {
+            console.warn("Não foi possível verificar suporte à lanterna", err);
+            btnToggleFlash.disabled = false;
+        }
+    }, 600);
 }
 
 async function toggleFlashlight() {
     if (!isScanning) return;
     
     try {
-        const stream = html5QrCode._localMediaStream;
-        if (stream) {
-            const track = stream.getVideoTracks()[0];
+        const track = getActiveVideoTrack();
+        if (track) {
             isFlashlightOn = !isFlashlightOn;
             
             await track.applyConstraints({
@@ -314,11 +389,15 @@ async function toggleFlashlight() {
                 btnToggleFlash.classList.remove('btn-primary');
                 btnToggleFlash.classList.add('btn-secondary');
             }
+        } else {
+            alert('Câmera não está ativa.');
         }
     } catch (err) {
         console.error("Erro ao alternar a lanterna", err);
-        alert('Não foi possível controlar a lanterna neste dispositivo/navegador.');
+        alert('Não foi possível acender a lanterna neste dispositivo/navegador.');
         isFlashlightOn = false;
+        btnToggleFlash.classList.remove('btn-primary');
+        btnToggleFlash.classList.add('btn-secondary');
     }
 }
 
@@ -561,8 +640,19 @@ function renderList() {
 }
 
 let feedbackTimeout;
+let flashTimeout;
 function showFeedback() {
     scanFeedback.classList.remove('hidden');
+    
+    // Ativa o flash verde nas bordas da tela
+    if (screenFlashOverlay) {
+        screenFlashOverlay.classList.add('active');
+        clearTimeout(flashTimeout);
+        flashTimeout = setTimeout(() => {
+            screenFlashOverlay.classList.remove('active');
+        }, 350);
+    }
+
     clearTimeout(feedbackTimeout);
     feedbackTimeout = setTimeout(() => {
         scanFeedback.classList.add('hidden');
@@ -577,7 +667,7 @@ function exportCSV() {
         return;
     }
     
-    let csvContent = "Patrimônio,Modelo,Nº Série,EAN,Observação,Quantidade,Data/Hora\n";
+    let csvContent = "Patrimônio;Modelo;Nº Série;EAN;Observação;Quantidade;Data/Hora\n";
     
     scannedItems.forEach(item => {
         let safePat = item.patrimonio ? item.patrimonio.replace(/"/g, '""') : '';
@@ -586,10 +676,11 @@ function exportCSV() {
         let safeEan = item.ean ? item.ean.replace(/"/g, '""') : '';
         let safeObs = item.obs ? item.obs.replace(/"/g, '""') : '';
         
-        csvContent += `"${safePat}","${safeMod}","${safeSer}","${safeEan}","${safeObs}",${item.quantity},"${item.timestamp}"\n`;
+        csvContent += `"${safePat}";"${safeMod}";"${safeSer}";"${safeEan}";"${safeObs}";${item.quantity};"${item.timestamp}"\n`;
     });
     
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    // Adiciona o BOM (Byte Order Mark) do UTF-8 para o Excel reconhecer os acentos
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     
     const link = document.createElement("a");
