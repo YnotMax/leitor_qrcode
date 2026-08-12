@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inventário: Leitor de Códigos</title>
+    <!-- Google Fonts para tipografia moderna -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Biblioteca HTML5-QRCode -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- FontAwesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1><i class="fa-solid fa-barcode"></i> Leitor de Inventário</h1>
+        </header>
+
+        <!-- Área do Leitor -->
+        <main class="scanner-section">
+            <div id="reader-container">
+                <div id="reader"></div>
+            </div>
+            
+            <div class="scanner-controls">
+                <button id="btn-toggle-scanner" class="btn btn-primary">
+                    <i class="fa-solid fa-camera"></i> <span id="toggle-scanner-text">Iniciar Câmera</span>
+                </button>
+                <button id="btn-toggle-flash" class="btn btn-secondary" disabled title="Lanterna">
+                    <i class="fa-solid fa-bolt"></i> Flash
+                </button>
+                <button id="btn-toggle-sound" class="btn btn-secondary" title="Sinal Sonoro">
+                    <i class="fa-solid fa-volume-high" id="sound-icon"></i> Som
+                </button>
+            </div>
+            
+            <div id="scan-feedback" class="feedback-message hidden">
+                <i class="fa-solid fa-check-circle"></i> <span id="feedback-text">Código capturado!</span>
+            </div>
+            
+            <!-- Formulário do Produto Atual -->
+            <div class="current-item-form">
+                <div class="form-header">
+                    <h3><i class="fa-solid fa-box-open"></i> <span id="form-title">Produto Atual</span></h3>
+                    <button id="btn-reset-form" class="btn-text" title="Limpar formulário">
+                        <i class="fa-solid fa-rotate-left"></i> Limpar
+                    </button>
+                </div>
+                <p class="form-hint">Aponte a câmera para preencher os campos abaixo:</p>
+                
+                <div class="form-group">
+                    <label for="current-qr">QR Code</label>
+                    <input type="text" id="current-qr" placeholder="Escaneie ou digite...">
+                </div>
+                
+                <div class="form-group">
+                    <label for="current-ean">Cód. Barras (EAN/UPC)</label>
+                    <input type="text" id="current-ean" placeholder="Escaneie ou digite...">
+                </div>
+                
+                <div class="form-group">
+                    <label for="current-obs">Observação</label>
+                    <textarea id="current-obs" rows="2" placeholder="Ex: cor, lote, avaria..."></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="current-qty">Quantidade</label>
+                        <input type="number" id="current-qty" value="1" min="1">
+                    </div>
+                    <button id="btn-save-item" class="btn btn-primary" style="flex: 2; margin-top: 1.5rem;">
+                        <i class="fa-solid fa-plus" id="save-icon"></i> <span id="save-btn-text">Adicionar à Lista</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Lista de Itens -->
+        <section class="list-section">
+            <div class="list-header">
+                <div>
+                    <h2>Itens Escaneados</h2>
+                    <span class="list-subtitle"><strong id="unique-count">0</strong> prods. (<strong id="total-count">0</strong> itens)</span>
+                </div>
+                <div class="list-actions">
+                    <button id="btn-copy" class="btn btn-icon" title="Copiar para Área de Transferência">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                    <button id="btn-export" class="btn btn-icon" title="Exportar CSV">
+                        <i class="fa-solid fa-file-csv"></i>
+                    </button>
+                    <button id="btn-clear" class="btn btn-icon btn-danger" title="Limpar Lista">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                <input type="text" id="search-input" placeholder="Buscar código ou observação..." class="search-input">
+            </div>
+            
+            <div class="items-list-container">
+                <ul id="items-list">
+                    <!-- Itens serão adicionados aqui via JS -->
+                    <li class="empty-state">Nenhum código escaneado ainda.</li>
+                </ul>
+            </div>
+        </section>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
