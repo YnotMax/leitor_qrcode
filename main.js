@@ -189,60 +189,77 @@ function onScanSuccess(decodedText, decodedResult) {
     lastScannedText = decodedText;
     lastScanTime = now;
     
-    // =========================================
-    // PARSER INTELIGENTE DE CÓDIGOS DE BARRAS
-    // =========================================
-    
-    let typeFound = 'Código capturado!';
-    
-    // 1. Regra Patrimônio (ex: 035.03.232)
-    const patrimonioRegex = /^\\d{3}\\.\\d{2}\\.\\d{3}$/;
-    
-    // 2. Regra EAN (13 dígitos)
-    const eanRegex = /^\\d{13}$/;
-    
-    // 3. Regra Consul / Código Composto (ex: CRC08CBANAJJ6584955E3)
-    // Modelo costuma ter 10 chars, série tem 9 chars. Total = 19 a 21 chars.
-    const consulRegex = /^(CRC[A-Z0-9]{7})([A-Z0-9]{9})(.*)$/i;
-    
-    // 4. Regra Elgin - Série (começa com ARC)
-    const elginSerieRegex = /^ARC\\d+$/i;
-    
-    // 5. Regra Elgin - Modelo (começa com KVF, etc)
-    const elginModeloRegex = /^KVF[A-Z0-9]+$/i;
+    decodedText = decodedText.trim();
 
-    if (patrimonioRegex.test(decodedText)) {
-        inputPatrimonio.value = decodedText;
-        typeFound = 'QR Code de Patrimônio lido!';
-        
-    } else if (consulRegex.test(decodedText)) {
-        const match = decodedText.match(consulRegex);
-        inputModelo.value = match[1]; // Modelo
-        inputSerie.value = match[2];  // Série
-        // match[3] seria o lote/sufixo, podemos por na obs
-        if (match[3]) {
-            const currentObs = inputObs.value;
-            inputObs.value = currentObs ? currentObs + ' / Lote: ' + match[3] : 'Lote: ' + match[3];
-        }
-        typeFound = 'Modelo e Série Consul identificados!';
-        
-    } else if (elginSerieRegex.test(decodedText)) {
-        inputSerie.value = decodedText;
-        typeFound = 'Série Elgin identificada!';
-        
-    } else if (elginModeloRegex.test(decodedText)) {
-        inputModelo.value = decodedText;
-        typeFound = 'Modelo Elgin identificado!';
-        
-    } else if (eanRegex.test(decodedText)) {
-        inputEan.value = decodedText;
-        typeFound = 'EAN lido!';
-        
+    // Verifica se o usuário clicou/focou em algum campo específico
+    const activeEl = document.activeElement;
+    const isTargetingInput = activeEl && (
+        activeEl === inputPatrimonio || 
+        activeEl === inputModelo || 
+        activeEl === inputSerie || 
+        activeEl === inputEan || 
+        activeEl === inputObs
+    );
+
+    let typeFound = 'Código capturado!';
+
+    if (isTargetingInput) {
+        // Se o usuário selecionou um campo, joga o valor diretamente nele
+        const previousValue = activeEl.value;
+        activeEl.value = previousValue ? previousValue + ' ' + decodedText : decodedText;
+        typeFound = 'Código inserido no campo selecionado!';
     } else {
-        // Fallback: se não se encaixa nas regras, joga na observação para o usuário decidir
-        const currentObs = inputObs.value;
-        inputObs.value = currentObs ? currentObs + ' / Código genérico lido: ' + decodedText : 'Lido: ' + decodedText;
-        typeFound = 'Código desconhecido (jogado na Observação)';
+        // =========================================
+        // PARSER INTELIGENTE DE CÓDIGOS DE BARRAS
+        // =========================================
+        
+        // 1. Regra Patrimônio (ex: 035.03.232)
+        const patrimonioRegex = /^\\d{3}\\.\\d{2}\\.\\d{3}$/;
+        
+        // 2. Regra EAN (8 a 14 dígitos)
+        const eanRegex = /^\\d{8,14}$/;
+        
+        // 3. Regra Consul / Código Composto (ex: CRC08CBANAJJ6584955E3)
+        const consulRegex = /^(CRC[A-Z0-9]{7})([A-Z0-9]{9})(.*)$/i;
+        
+        // 4. Regra Elgin - Série (começa com ARC)
+        const elginSerieRegex = /^ARC\\d+$/i;
+        
+        // 5. Regra Elgin - Modelo (começa com KVF, etc)
+        const elginModeloRegex = /^KVF[A-Z0-9]+$/i;
+
+        if (patrimonioRegex.test(decodedText)) {
+            inputPatrimonio.value = decodedText;
+            typeFound = 'QR Code de Patrimônio lido!';
+            
+        } else if (consulRegex.test(decodedText)) {
+            const match = decodedText.match(consulRegex);
+            inputModelo.value = match[1]; // Modelo
+            inputSerie.value = match[2];  // Série
+            if (match[3]) {
+                const currentObs = inputObs.value;
+                inputObs.value = currentObs ? currentObs + ' / Lote: ' + match[3] : 'Lote: ' + match[3];
+            }
+            typeFound = 'Modelo e Série Consul identificados!';
+            
+        } else if (elginSerieRegex.test(decodedText)) {
+            inputSerie.value = decodedText;
+            typeFound = 'Série Elgin identificada!';
+            
+        } else if (elginModeloRegex.test(decodedText)) {
+            inputModelo.value = decodedText;
+            typeFound = 'Modelo Elgin identificado!';
+            
+        } else if (eanRegex.test(decodedText)) {
+            inputEan.value = decodedText;
+            typeFound = 'EAN lido!';
+            
+        } else {
+            // Fallback: se não se encaixa nas regras, joga na observação
+            const currentObs = inputObs.value;
+            inputObs.value = currentObs ? currentObs + ' / Código genérico lido: ' + decodedText : 'Lido: ' + decodedText;
+            typeFound = 'Código desconhecido (jogado na Observação)';
+        }
     }
     
     feedbackText.innerText = typeFound;
