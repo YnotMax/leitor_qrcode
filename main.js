@@ -1,6 +1,13 @@
 // --- Configurações Iniciais e Estado ---
 const STORAGE_KEY = 'inventario_codigos';
 const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzmT2-y7yFsZr9U43x_uvf8yth60r2GXE5Itk-s0P73YEnSFbVcC5mCTN5BSKdsJxcnwg/exec';
+
+// Base de Dados de Lookup (EAN -> Modelo)
+const EAN_DB = {
+    '7891129224049': 'CRC08CBANA',
+    '7891129134959': 'CRC08CBANA' // Outro EAN do exemplo
+};
+
 let html5QrCode = null;
 let isScanning = false;
 let isFlashlightOn = false;
@@ -38,6 +45,7 @@ const btnCopy = document.getElementById('btn-copy');
 const btnClear = document.getElementById('btn-clear');
 const searchInput = document.getElementById('search-input');
 const btnSyncAll = document.getElementById('btn-sync-all');
+const globalSyncStatusEl = document.getElementById('global-sync-status');
 
 // Elementos do Formulário Atual
 const inputPatrimonio = document.getElementById('current-patrimonio');
@@ -57,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadItems();
     renderList();
     setupEventListeners();
+    updateGlobalSyncStatus();
 });
 
 function setupEventListeners() {
@@ -74,6 +83,13 @@ function setupEventListeners() {
     if (btnSyncAll) {
         btnSyncAll.addEventListener('click', syncAllPending);
     }
+    
+    // Listeners de Conexão (Internet)
+    window.addEventListener('online', () => {
+        updateGlobalSyncStatus();
+        syncAllPending(); // Tenta sincronizar automaticamente ao voltar a internet
+    });
+    window.addEventListener('offline', updateGlobalSyncStatus);
 }
 
 // --- Funções de Áudio (Beep) ---
@@ -309,6 +325,12 @@ function onScanSuccess(decodedText, decodedResult) {
         } else if (eanRegex.test(decodedText)) {
             inputEan.value = decodedText;
             typeFound = 'EAN lido!';
+            
+            // Auto-preencher o modelo se existir na nossa base local (Lookup)
+            if (EAN_DB[decodedText]) {
+                inputModelo.value = EAN_DB[decodedText];
+                typeFound = 'EAN lido e Modelo auto-preenchido!';
+            }
             
         } else {
             // Fallback: se não se encaixa nas regras, joga na observação
@@ -678,6 +700,35 @@ function updateSyncAllButton() {
         btnSyncAll.title = `Sincronizar Pendentes (${pendingCount})`;
     } else {
         btnSyncAll.style.display = 'none';
+    }
+    
+    updateGlobalSyncStatus();
+}
+
+function updateGlobalSyncStatus() {
+    if (!globalSyncStatusEl) return;
+    
+    const isOnline = navigator.onLine;
+    const hasPending = scannedItems.some(item => !item.synced);
+    
+    // Reset de classes
+    globalSyncStatusEl.className = 'global-sync-status';
+    
+    if (!isOnline) {
+        // Sem internet
+        globalSyncStatusEl.classList.add('offline');
+        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i>';
+        globalSyncStatusEl.title = 'Offline (Sem Internet)';
+    } else if (hasPending) {
+        // Com internet, mas com itens pendentes
+        globalSyncStatusEl.classList.add('pending');
+        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+        globalSyncStatusEl.title = 'Online (Itens aguardando sincronização)';
+    } else {
+        // Com internet e tudo sincronizado
+        globalSyncStatusEl.classList.add('online');
+        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-check"></i>';
+        globalSyncStatusEl.title = 'Online (Sincronizado)';
     }
 }
 
