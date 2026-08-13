@@ -424,6 +424,41 @@ body {
     gap: 0.25rem;
 }
 
+/* Item Content */
+.item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+/* Status de Sincronização */
+.sync-status {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    font-size: 1.2rem;
+}
+
+.sync-status.synced {
+    color: #28a745;
+}
+
+.sync-status.pending {
+    color: #ffc107;
+}
+
+/* Pulsing effect during sync */
+.sync-status.syncing {
+    color: #17a2b8;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.1); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
 .item-code {
     font-family: monospace;
     font-size: 0.95rem;

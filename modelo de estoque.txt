@@ -1,0 +1,143 @@
+INVENTÁRIO DE PRODUTOS
+---------------------
+1. Qtd: 1
+   Patrimônio: 005.25.464
+   Modelo: CRC08CBANA
+   Série: JI6260332
+   EAN: 7891129224049
+   Obs: Lido: 005.25.464 / Código genérico lido:
+
+2. Qtd: 1
+   Patrimônio: 005.25.588
+   Modelo: CRC08CBANA
+   Série: JJ6584991
+   EAN: 7891129224049
+
+3. Qtd: 1
+   Patrimônio: 005.25.413
+   Modelo: CRC08CBANA
+   Série: JI62603334
+   EAN: 7891129224049
+
+4. Qtd: 1
+   Patrimônio: 005.25.430
+   Modelo: CRC08CBANA
+   Série: JL6858436
+   EAN: 7891129224049
+
+5. Qtd: 1
+   Patrimônio: 005.25.472
+   Modelo: CRC08CBANA
+   Série: JJ6585017
+   EAN: 7891129224049
+
+6. Qtd: 1
+   Patrimônio: 005.25.553
+   Modelo: CRC08CBANA
+   Série: JJ506944
+   EAN: 7891129224049
+
+7. Qtd: 1
+   Patrimônio: 005.25.448
+   Modelo: CRC08CBANA
+   Série: JL6858428
+   EAN: 7891129224049
+
+8. Qtd: 1
+   Patrimônio: 005.25.561
+   Modelo: CRC08CBANA
+   Série: JJ6583652
+   EAN: 511123224049
+
+9. Qtd: 1
+   Patrimônio: 005.25.294
+   Modelo: CRC08CBANA
+   Série: JJ6506942
+   EAN: 5501129224049
+
+10. Qtd: 1
+   Patrimônio: 005.25.316
+   Modelo: CRC08CBANA
+   Série: JH6776404
+   EAN: 7891129224049
+
+11. Qtd: 1
+   Patrimônio: 005.25.537
+   Modelo: CRC08CBANA
+   Série: JJ6540445
+   EAN: 7891129224049
+
+12. Qtd: 1
+   Patrimônio: 005.25.545
+   Modelo: CRC08CBANA
+   Série: JL6859724
+   EAN: 7891129224049
+
+13. Qtd: 1
+   Patrimônio: 22120934
+   Modelo: CRC08CBANA
+   Série: JE0734621
+   EAN: 7891129134959
+   Obs: Patrimônio antigo
+
+14. Qtd: 1
+   Patrimônio: 22171843
+   Modelo: CRC08CBANA
+   Série: JG3023345
+   EAN: 7891129134959
+   Obs: Patrimônio antigo
+
+15. Qtd: 1
+   Patrimônio: 005.25.529
+   Modelo: CRC08CBANA
+   Série: JJ6584955
+   EAN: 7891129224049
+
+16. Qtd: 1
+   Patrimônio: 005.25.510
+   Modelo: CRC08CBANA
+   Série: JM6094900
+   EAN: 7891129224049
+   Obs: Lido:
+
+17. Qtd: 1
+   Patrimônio: 005.25.502
+   Modelo: CRC08CBANA
+   Série: JJ6506956
+   EAN: 7891129224049
+
+18. Qtd: 1
+   Patrimônio: 005.25.618
+   Modelo: CRC08CBANA
+   Série: JJ6510395
+   EAN: 7891129224049
+
+19. Qtd: 1
+   Patrimônio: 005.25.324
+   Modelo: CRC08CBANA00
+   Série: JL6858426
+   EAN: 7891129224049
+
+20. Qtd: 1
+   Patrimônio: 005.25.405
+   Modelo: CRC08CBANA00
+   Série: JJ6583714
+   EAN: 7891129224049
+
+21. Qtd: 1
+   Patrimônio: 005.25.308
+   Modelo: CRC08CBANA00
+   Série: JL6859708
+   EAN: 7891129224049
+
+22. Qtd: 1
+   Patrimônio: 005.25.340
+   Modelo: CRC08CBANA00
+   Série: JL6858420
+   EAN: 7891129224049
+
+23. Qtd: 1
+   Patrimônio: 005.25.383
+   Modelo: CRC08CBANA00
+   Série: JL6859721
+   EAN: 7891129224049

@@ -1,5 +1,6 @@
 // --- Configurações Iniciais e Estado ---
 const STORAGE_KEY = 'inventario_codigos';
+const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzmT2-y7yFsZr9U43x_uvf8yth60r2GXE5Itk-s0P73YEnSFbVcC5mCTN5BSKdsJxcnwg/exec';
 let html5QrCode = null;
 let isScanning = false;
 let isFlashlightOn = false;
@@ -36,6 +37,7 @@ const btnExport = document.getElementById('btn-export');
 const btnCopy = document.getElementById('btn-copy');
 const btnClear = document.getElementById('btn-clear');
 const searchInput = document.getElementById('search-input');
+const btnSyncAll = document.getElementById('btn-sync-all');
 
 // Elementos do Formulário Atual
 const inputPatrimonio = document.getElementById('current-patrimonio');
@@ -68,6 +70,10 @@ function setupEventListeners() {
     btnSaveItem.addEventListener('click', saveCurrentItem);
     btnResetForm.addEventListener('click', resetForm);
     searchInput.addEventListener('input', renderList);
+    
+    if (btnSyncAll) {
+        btnSyncAll.addEventListener('click', syncAllPending);
+    }
 }
 
 // --- Funções de Áudio (Beep) ---
@@ -406,7 +412,12 @@ async function toggleFlashlight() {
 function loadItems() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-        scannedItems = JSON.parse(saved);
+        try {
+            scannedItems = JSON.parse(saved);
+        } catch (e) {
+            console.error('Erro ao ler dados salvos', e);
+            scannedItems = [];
+        }
     }
 }
 
@@ -461,6 +472,22 @@ function saveCurrentItem() {
         return;
     }
     
+    // --- Proteção contra Duplicidade ---
+    if ((serie || patrimonio) && !editingItemId) {
+        const isDuplicate = scannedItems.some(i => 
+            (serie && i.serie === serie) || 
+            (patrimonio && i.patrimonio === patrimonio)
+        );
+        
+        if (isDuplicate) {
+            alert("🛑 ATENÇÃO: Este produto (Série/Patrimônio) já foi bipado anteriormente e consta na sua lista!");
+            playBeepSound(); // Som extra opcional
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]); // Vibração de erro
+            return; // Bloqueia o salvamento
+        }
+    }
+    // -----------------------------------
+    
     if (editingItemId) {
         // Modo Edição de Item existente
         const itemIndex = scannedItems.findIndex(i => i.id === editingItemId);
@@ -485,7 +512,8 @@ function saveCurrentItem() {
                 ean: ean,
                 obs: obs,
                 quantity: qty, // Deveria ser 1 na maioria das vezes, mas deixa o usuário forçar se quiser.
-                timestamp: new Date().toLocaleString('pt-BR')
+                timestamp: new Date().toLocaleString('pt-BR'),
+                synced: false
             };
             scannedItems.unshift(newItem);
         } else {
@@ -494,11 +522,12 @@ function saveCurrentItem() {
                 (modelo && item.modelo === modelo) || (ean && item.ean === ean)
             );
             
-            if (existingIndex >= 0 && !obs && !item.serie && !item.patrimonio) {
+            if (existingIndex >= 0 && !obs && !scannedItems[existingIndex].serie && !scannedItems[existingIndex].patrimonio) {
                 // Se achou modelo idêntico e nenhum deles tem série/patrimonio
                 scannedItems[existingIndex].quantity += qty;
                 if (modelo && !scannedItems[existingIndex].modelo) scannedItems[existingIndex].modelo = modelo;
                 if (ean && !scannedItems[existingIndex].ean) scannedItems[existingIndex].ean = ean;
+                scannedItems[existingIndex].synced = false; // Como foi alterado, precisa re-sincronizar
                 
                 const item = scannedItems.splice(existingIndex, 1)[0];
                 scannedItems.unshift(item);
@@ -511,7 +540,8 @@ function saveCurrentItem() {
                     ean: ean,
                     obs: obs,
                     quantity: qty,
-                    timestamp: new Date().toLocaleString('pt-BR')
+                    timestamp: new Date().toLocaleString('pt-BR'),
+                    synced: false
                 };
                 scannedItems.unshift(newItem);
             }
@@ -519,10 +549,136 @@ function saveCurrentItem() {
         feedbackText.innerText = 'Produto adicionado!';
     }
     
+    // Pegar o item recém salvo/editado para enviar
+    const currentItemToSend = scannedItems[0];
+    
     resetForm();
     saveItems();
     renderList();
     showFeedback();
+    
+    // Envio para Nuvem (Webhook)
+    syncToWebhook(currentItemToSend);
+}
+
+// --- Integração Nuvem ---
+async function syncToWebhook(item) {
+    if (!WEBHOOK_URL) return;
+    
+    // UI Update visual instantâneo para "syncing"
+    const syncStatusEl = document.getElementById(`sync-icon-${item.id}`);
+    if (syncStatusEl) {
+        syncStatusEl.className = 'fa-solid fa-cloud-arrow-up sync-status syncing';
+    }
+    
+    try {
+        const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Necessário para evitar bloqueio de CORS do Google Apps Script
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(item)
+        });
+        
+        // Se a requisição não lançou erro (Network Error), assumimos que chegou com sucesso!
+        console.log('Enviado para planilha com sucesso (modo no-cors).');
+        
+        // Marca como sincronizado
+        item.synced = true;
+        saveItems();
+        
+        // Atualiza UI
+        if (syncStatusEl) {
+            syncStatusEl.className = 'fa-solid fa-cloud-check sync-status synced';
+            syncStatusEl.title = 'Sincronizado na nuvem';
+        }
+        
+        // Esconde botão global se não houver mais pendentes
+        updateSyncAllButton();
+        
+        // Feedback visual extra opcional
+        feedbackText.innerText = 'Enviado p/ Planilha!';
+        setTimeout(() => {
+            if(!scanFeedback.classList.contains('hidden')) {
+                scanFeedback.classList.add('hidden');
+            }
+        }, 3000);
+        
+    } catch (error) {
+        console.error("Erro ao enviar para o Webhook (provável falha de internet):", error);
+        
+        if (syncStatusEl) {
+            syncStatusEl.className = 'fa-solid fa-cloud-arrow-up sync-status pending';
+            syncStatusEl.title = 'Aguardando sincronização (Sem internet)';
+        }
+        updateSyncAllButton();
+        
+        // Não usar alert intrusivo para falha silenciosa, apenas feedback textual
+        feedbackText.innerText = 'Offline. Item salvo localmente.';
+        setTimeout(() => {
+            if(!scanFeedback.classList.contains('hidden')) {
+                scanFeedback.classList.add('hidden');
+            }
+        }, 3000);
+    }
+}
+
+async function syncAllPending() {
+    if (!WEBHOOK_URL) return;
+    
+    const pendingItems = scannedItems.filter(item => !item.synced);
+    if (pendingItems.length === 0) return;
+    
+    if (btnSyncAll) {
+        btnSyncAll.disabled = true;
+        btnSyncAll.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+    
+    let successCount = 0;
+    
+    // Tenta enviar um por um
+    for (const item of pendingItems) {
+        try {
+            await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(item)
+            });
+            item.synced = true;
+            successCount++;
+        } catch (error) {
+            console.error("Falha ao sincronizar item:", item.id);
+            break; // Se falhou um, provavelmente continua sem internet, então aborta o loop
+        }
+    }
+    
+    if (successCount > 0) {
+        saveItems();
+        renderList(); // re-renderiza tudo para atualizar os ícones
+        alert(`${successCount} item(s) enviado(s) para a planilha com sucesso!`);
+    } else {
+        alert("Sem conexão. Verifique sua internet e tente novamente.");
+    }
+    
+    if (btnSyncAll) {
+        btnSyncAll.disabled = false;
+        btnSyncAll.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
+    }
+    updateSyncAllButton();
+}
+
+function updateSyncAllButton() {
+    if (!btnSyncAll) return;
+    const pendingCount = scannedItems.filter(item => !item.synced).length;
+    
+    if (pendingCount > 0) {
+        btnSyncAll.style.display = 'inline-flex';
+        btnSyncAll.title = `Sincronizar Pendentes (${pendingCount})`;
+    } else {
+        btnSyncAll.style.display = 'none';
+    }
 }
 
 function updateQuantity(id, delta) {
@@ -609,8 +765,13 @@ function renderList() {
                 obsHtml = `<div class="item-obs" style="font-size: 0.85rem; color: var(--text-light); margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border-color);"><i class="fa-regular fa-comment-dots" style="width: 18px;"></i> ${item.obs}</div>`;
             }
             
+            // Nuvem de Sincronização
+            let syncIconClass = item.synced ? 'fa-solid fa-cloud-check sync-status synced' : 'fa-solid fa-cloud-arrow-up sync-status pending';
+            let syncIconTitle = item.synced ? 'Sincronizado na nuvem' : 'Aguardando sincronização';
+            
             li.innerHTML = `
-                <div class="item-details" style="flex: 1; padding-right: 0.5rem;">
+                <i id="sync-icon-${item.id}" class="${syncIconClass}" title="${syncIconTitle}"></i>
+                <div class="item-details" style="flex: 1; padding-right: 0.5rem; position: relative;">
                     ${codesHtml}
                     ${obsHtml}
                     <div class="item-time" style="margin-top: 0.3rem;">${item.timestamp}</div>
@@ -637,6 +798,8 @@ function renderList() {
     
     uniqueCountEl.innerText = scannedItems.length;
     totalCountEl.innerText = totalItems;
+    
+    updateSyncAllButton();
 }
 
 let feedbackTimeout;
