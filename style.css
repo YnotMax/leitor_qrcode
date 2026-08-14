@@ -318,12 +318,89 @@ input.highlight-autofill {
     background-color: #fee2e2 !important;
     color: #b91c1c !important;
     border: 1px solid #ef4444;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);
+}
+
+.btn-close-feedback {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    padding: 0.1rem 0.3rem;
+    line-height: 1;
+    opacity: 0.8;
+    border-radius: 4px;
+}
+
+.btn-close-feedback:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
 }
 
 .feedback-message.hidden {
     opacity: 0;
     transform: translateY(-20px);
     pointer-events: none;
+}
+
+/* Alerta Inline de Duplicidade no Formulário */
+.form-duplicate-alert {
+    background-color: #fef2f2;
+    border: 2px solid #ef4444;
+    border-radius: var(--radius-md);
+    padding: 0.75rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    animation: shake 0.4s ease, popIn 0.3s ease;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.12);
+}
+
+.form-duplicate-alert.hidden {
+    display: none;
+}
+
+.alert-header-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #b91c1c;
+    font-size: 0.9rem;
+}
+
+.alert-desc-line {
+    font-size: 0.8rem;
+    color: #991b1b;
+    margin-left: 1.3rem;
+}
+
+.btn-dismiss-duplicate {
+    align-self: flex-end;
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.2rem;
+    transition: background 0.2s ease;
+}
+
+.btn-dismiss-duplicate:active {
+    background: #dc2626;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
 }
 
 /* Current Item Form */

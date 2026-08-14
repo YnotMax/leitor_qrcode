@@ -9,7 +9,8 @@ const INITIAL_EAN_CATALOG = {
     '7891129224049': 'CRC08CBANA',
     '7891129134959': 'CRC08CBANA',
     '511123224049': 'CRC08CBANA',
-    '5501129224049': 'CRC08CBANA'
+    '5501129224049': 'CRC08CBANA',
+    'CT05CBB2232768': 'CRT05CBBNA'
 };
 
 let eanLookupDB = {};
@@ -42,12 +43,18 @@ const btnToggleSound = document.getElementById('btn-toggle-sound');
 const soundIcon = document.getElementById('sound-icon');
 const scanFeedback = document.getElementById('scan-feedback');
 const feedbackText = document.getElementById('feedback-text');
+const btnCloseFeedback = document.getElementById('btn-close-feedback');
 const screenFlashOverlay = document.getElementById('screen-flash-overlay');
 
 const stickyStatusBar = document.getElementById('sticky-status-bar');
 const statusBarIcon = document.getElementById('status-bar-icon');
 const statusBarText = document.getElementById('status-bar-text');
 const modeloBadge = document.getElementById('modelo-badge');
+
+const formDuplicateAlert = document.getElementById('form-duplicate-alert');
+const formDuplicateTitle = document.getElementById('form-duplicate-title');
+const formDuplicateDesc = document.getElementById('form-duplicate-desc');
+const btnDismissDuplicateAlert = document.getElementById('btn-dismiss-duplicate-alert');
 
 const itemsListEl = document.getElementById('items-list');
 const totalCountEl = document.getElementById('total-count');
@@ -93,8 +100,27 @@ function setupEventListeners() {
     btnResetForm.addEventListener('click', resetForm);
     searchInput.addEventListener('input', renderList);
     
+    // Auto-preenchimento ao digitar ou colar no campo EAN
+    inputEan.addEventListener('input', () => {
+        const val = inputEan.value.trim();
+        if (val && eanLookupDB[val]) {
+            inputModelo.value = eanLookupDB[val];
+            inputModelo.classList.add('highlight-autofill');
+            if (modeloBadge) modeloBadge.style.display = 'inline-flex';
+            setTimeout(() => inputModelo.classList.remove('highlight-autofill'), 1500);
+        }
+    });
+    
     if (btnSyncAll) {
         btnSyncAll.addEventListener('click', syncAllPending);
+    }
+    
+    if (btnCloseFeedback) {
+        btnCloseFeedback.addEventListener('click', dismissDuplicateAlerts);
+    }
+    
+    if (btnDismissDuplicateAlert) {
+        btnDismissDuplicateAlert.addEventListener('click', dismissDuplicateAlerts);
     }
     
     if (stickyStatusBar) {
@@ -373,6 +399,9 @@ function checkDuplicateCode(patrimonio, serie) {
 function onScanSuccess(decodedText, decodedResult) {
     if (isCoolingDown) return;
 
+    // Ao iniciar uma nova leitura, limpa qualquer alerta de duplicidade antigo
+    dismissDuplicateAlerts();
+
     const now = Date.now();
     // Debounce de 1.5s para o exato mesmo código
     if (decodedText === lastScannedText && (now - lastScanTime) < 1500) {
@@ -404,8 +433,21 @@ function onScanSuccess(decodedText, decodedResult) {
         const previousValue = activeEl.value;
         activeEl.value = previousValue ? previousValue + ' ' + decodedText : decodedText;
         typeFound = 'Código inserido no campo selecionado!';
+        
         if (activeEl === inputPatrimonio) detectedPatrimonio = activeEl.value;
         if (activeEl === inputSerie) detectedSerie = activeEl.value;
+        
+        // Se o usuário clicou no campo EAN e bipou, TAMBÉM aciona o auto-preenchimento de Modelo!
+        if (activeEl === inputEan) {
+            const eanClean = activeEl.value.trim();
+            if (eanLookupDB[eanClean]) {
+                inputModelo.value = eanLookupDB[eanClean];
+                inputModelo.classList.add('highlight-autofill');
+                if (modeloBadge) modeloBadge.style.display = 'inline-flex';
+                setTimeout(() => inputModelo.classList.remove('highlight-autofill'), 1500);
+                typeFound = `✨ EAN inserido e Modelo "${eanLookupDB[eanClean]}" preenchido automaticamente!`;
+            }
+        }
     } else {
         // =========================================
         // PARSER INTELIGENTE DE CÓDIGOS DE BARRAS
@@ -480,7 +522,7 @@ function onScanSuccess(decodedText, decodedResult) {
     // --- Verificação Instantânea de Duplicidade na Leitura ---
     const duplicateWarning = checkDuplicateCode(detectedPatrimonio, detectedSerie);
     if (duplicateWarning) {
-        showWarningFeedback(`⚠️ DUPLICIDADE: ${duplicateWarning}`);
+        showWarningFeedback(`⚠️ DUPLICIDADE DETECTADA`, duplicateWarning);
     } else {
         feedbackText.innerText = typeFound;
         playBeepSound();
@@ -589,6 +631,8 @@ function saveItems() {
 }
 
 function resetForm() {
+    dismissDuplicateAlerts();
+    
     inputPatrimonio.value = '';
     inputModelo.value = '';
     inputSerie.value = '';
@@ -1012,8 +1056,27 @@ function renderList() {
 let feedbackTimeout;
 let flashTimeout;
 
+function dismissDuplicateAlerts() {
+    if (scanFeedback) {
+        scanFeedback.classList.remove('warning');
+        scanFeedback.classList.add('hidden');
+    }
+    if (btnCloseFeedback) {
+        btnCloseFeedback.style.display = 'none';
+    }
+    if (formDuplicateAlert) {
+        formDuplicateAlert.classList.add('hidden');
+    }
+    clearTimeout(feedbackTimeout);
+}
+
 function showFeedback() {
+    dismissDuplicateAlerts();
+    
     scanFeedback.classList.remove('hidden', 'warning');
+    if (btnCloseFeedback) {
+        btnCloseFeedback.style.display = 'none';
+    }
     
     // Ativa o flash verde nas bordas da tela
     if (screenFlashOverlay) {
@@ -1031,11 +1094,23 @@ function showFeedback() {
     }, 2500);
 }
 
-function showWarningFeedback(msg) {
+function showWarningFeedback(title, desc) {
+    // 1. Banner superior de aviso com botão de fechar
     scanFeedback.classList.remove('hidden');
     scanFeedback.classList.add('warning');
-    feedbackText.innerText = msg;
+    feedbackText.innerText = title;
+    if (btnCloseFeedback) {
+        btnCloseFeedback.style.display = 'inline-block';
+    }
     
+    // 2. Alerta inline dentro do formulário (sempre visível mesmo com teclado aberto)
+    if (formDuplicateAlert) {
+        formDuplicateAlert.classList.remove('hidden');
+        if (formDuplicateTitle) formDuplicateTitle.innerText = title;
+        if (formDuplicateDesc) formDuplicateDesc.innerText = desc || 'Este código já foi registrado neste inventário.';
+    }
+    
+    // 3. Efeito visual nas bordas da tela em vermelho
     if (screenFlashOverlay) {
         screenFlashOverlay.classList.remove('active');
         screenFlashOverlay.classList.add('warning');
@@ -1050,11 +1125,7 @@ function showWarningFeedback(msg) {
         navigator.vibrate([150, 80, 150]);
     }
     
-    clearTimeout(feedbackTimeout);
-    feedbackTimeout = setTimeout(() => {
-        scanFeedback.classList.remove('warning');
-        scanFeedback.classList.add('hidden');
-    }, 3500);
+    // Fica visível permanentemente até o usuário clicar em "Entendi / Fechar" ou escanear outro código
 }
 
 // --- Exportação e Cópia ---

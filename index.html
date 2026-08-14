@@ -53,7 +53,10 @@
             </div>
             
             <div id="scan-feedback" class="feedback-message hidden">
-                <i class="fa-solid fa-check-circle"></i> <span id="feedback-text">Código capturado!</span>
+                <i id="feedback-icon" class="fa-solid fa-check-circle"></i> <span id="feedback-text">Código capturado!</span>
+                <button id="btn-close-feedback" class="btn-close-feedback" style="display: none;" title="Fechar aviso">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
             
             <!-- Formulário do Produto Atual -->
@@ -64,6 +67,19 @@
                         <i class="fa-solid fa-rotate-left"></i> Limpar
                     </button>
                 </div>
+
+                <!-- Alerta Inline de Duplicidade no Formulário -->
+                <div id="form-duplicate-alert" class="form-duplicate-alert hidden">
+                    <div class="alert-header-line">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <strong id="form-duplicate-title">Item já escaneado anteriormente!</strong>
+                    </div>
+                    <div id="form-duplicate-desc" class="alert-desc-line">Este código já foi registrado neste inventário.</div>
+                    <button type="button" id="btn-dismiss-duplicate-alert" class="btn-dismiss-duplicate">
+                        <i class="fa-solid fa-check"></i> Entendi / Fechar
+                    </button>
+                </div>
+                
                 <p class="form-hint">Aponte a câmera para preencher os campos abaixo:</p>
                 
                 <div class="form-group">
