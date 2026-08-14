@@ -1,12 +1,19 @@
 // --- Configurações Iniciais e Estado ---
 const STORAGE_KEY = 'inventario_codigos';
+const STORAGE_HISTORY_KEY = 'inventario_historico_contados';
+const STORAGE_LOOKUP_KEY = 'inventario_ean_lookup_db';
 const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbzmT2-y7yFsZr9U43x_uvf8yth60r2GXE5Itk-s0P73YEnSFbVcC5mCTN5BSKdsJxcnwg/exec';
 
-// Base de Dados de Lookup (EAN -> Modelo)
-const EAN_DB = {
+// Catálogo Base Inicial
+const INITIAL_EAN_CATALOG = {
     '7891129224049': 'CRC08CBANA',
-    '7891129134959': 'CRC08CBANA' // Outro EAN do exemplo
+    '7891129134959': 'CRC08CBANA',
+    '511123224049': 'CRC08CBANA',
+    '5501129224049': 'CRC08CBANA'
 };
+
+let eanLookupDB = {};
+let scannedHistory = { patrimonios: {}, series: {} };
 
 let html5QrCode = null;
 let isScanning = false;
@@ -37,6 +44,11 @@ const scanFeedback = document.getElementById('scan-feedback');
 const feedbackText = document.getElementById('feedback-text');
 const screenFlashOverlay = document.getElementById('screen-flash-overlay');
 
+const stickyStatusBar = document.getElementById('sticky-status-bar');
+const statusBarIcon = document.getElementById('status-bar-icon');
+const statusBarText = document.getElementById('status-bar-text');
+const modeloBadge = document.getElementById('modelo-badge');
+
 const itemsListEl = document.getElementById('items-list');
 const totalCountEl = document.getElementById('total-count');
 const uniqueCountEl = document.getElementById('unique-count');
@@ -45,7 +57,6 @@ const btnCopy = document.getElementById('btn-copy');
 const btnClear = document.getElementById('btn-clear');
 const searchInput = document.getElementById('search-input');
 const btnSyncAll = document.getElementById('btn-sync-all');
-const globalSyncStatusEl = document.getElementById('global-sync-status');
 
 // Elementos do Formulário Atual
 const inputPatrimonio = document.getElementById('current-patrimonio');
@@ -62,6 +73,8 @@ const saveIcon = document.getElementById('save-icon');
 
 // --- Inicialização ---
 document.addEventListener('DOMContentLoaded', () => {
+    loadLookupDB();
+    loadHistory();
     loadItems();
     renderList();
     setupEventListeners();
@@ -82,6 +95,15 @@ function setupEventListeners() {
     
     if (btnSyncAll) {
         btnSyncAll.addEventListener('click', syncAllPending);
+    }
+    
+    if (stickyStatusBar) {
+        stickyStatusBar.addEventListener('click', () => {
+            const hasPending = scannedItems.some(i => !i.synced);
+            if (hasPending && navigator.onLine) {
+                syncAllPending();
+            }
+        });
     }
     
     // Listeners de Conexão (Internet)
@@ -120,6 +142,33 @@ function playBeepSound() {
         osc.stop(audioCtx.currentTime + 0.12);
     } catch (e) {
         console.warn("Áudio não suportado ou bloqueado", e);
+    }
+}
+
+function playWarningSound() {
+    if (!isSoundEnabled) return;
+    try {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+        
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(350, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(200, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.35);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+    } catch (e) {
+        console.warn("Áudio não suportado", e);
     }
 }
 
@@ -249,6 +298,78 @@ async function stopScanner() {
     }
 }
 
+// --- Helpers de Histórico e Auto-Aprendizado (Lookup) ---
+
+function loadLookupDB() {
+    try {
+        const saved = localStorage.getItem(STORAGE_LOOKUP_KEY);
+        const parsed = saved ? JSON.parse(saved) : {};
+        eanLookupDB = { ...INITIAL_EAN_CATALOG, ...parsed };
+    } catch (e) {
+        eanLookupDB = { ...INITIAL_EAN_CATALOG };
+    }
+}
+
+function learnEanModel(ean, modelo) {
+    if (!ean || !modelo) return;
+    ean = ean.trim();
+    modelo = modelo.trim();
+    if (!ean || !modelo) return;
+    
+    if (eanLookupDB[ean] !== modelo) {
+        eanLookupDB[ean] = modelo;
+        try {
+            localStorage.setItem(STORAGE_LOOKUP_KEY, JSON.stringify(eanLookupDB));
+            console.log(`[Auto-Aprendizado] EAN ${ean} -> Modelo ${modelo}`);
+        } catch (e) {
+            console.error("Erro ao salvar auto-aprendizado", e);
+        }
+    }
+}
+
+function loadHistory() {
+    try {
+        const saved = localStorage.getItem(STORAGE_HISTORY_KEY);
+        scannedHistory = saved ? JSON.parse(saved) : { patrimonios: {}, series: {} };
+        if (!scannedHistory.patrimonios) scannedHistory.patrimonios = {};
+        if (!scannedHistory.series) scannedHistory.series = {};
+    } catch (e) {
+        scannedHistory = { patrimonios: {}, series: {} };
+    }
+}
+
+function saveHistory() {
+    try {
+        localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(scannedHistory));
+    } catch (e) {
+        console.error("Erro ao salvar histórico", e);
+    }
+}
+
+function checkDuplicateCode(patrimonio, serie) {
+    if (!patrimonio && !serie) return null;
+    
+    if (patrimonio) {
+        const normPat = patrimonio.trim().toUpperCase();
+        const inList = scannedItems.find(i => i.patrimonio && i.patrimonio.trim().toUpperCase() === normPat);
+        if (inList) return `Patrimônio ${patrimonio} já está na lista atual!`;
+        if (scannedHistory.patrimonios && scannedHistory.patrimonios[normPat]) {
+            return `Patrimônio ${patrimonio} já foi bipado anteriormente!`;
+        }
+    }
+    
+    if (serie) {
+        const normSer = serie.trim().toUpperCase();
+        const inList = scannedItems.find(i => i.serie && i.serie.trim().toUpperCase() === normSer);
+        if (inList) return `Nº de Série ${serie} já está na lista atual!`;
+        if (scannedHistory.series && scannedHistory.series[normSer]) {
+            return `Nº de Série ${serie} já foi bipado anteriormente!`;
+        }
+    }
+    
+    return null;
+}
+
 function onScanSuccess(decodedText, decodedResult) {
     if (isCoolingDown) return;
 
@@ -274,40 +395,47 @@ function onScanSuccess(decodedText, decodedResult) {
     );
 
     let typeFound = 'Código capturado!';
+    let detectedPatrimonio = '';
+    let detectedSerie = '';
+    let isAutofilled = false;
 
     if (isTargetingInput) {
         // Se o usuário selecionou um campo, joga o valor diretamente nele
         const previousValue = activeEl.value;
         activeEl.value = previousValue ? previousValue + ' ' + decodedText : decodedText;
         typeFound = 'Código inserido no campo selecionado!';
+        if (activeEl === inputPatrimonio) detectedPatrimonio = activeEl.value;
+        if (activeEl === inputSerie) detectedSerie = activeEl.value;
     } else {
         // =========================================
         // PARSER INTELIGENTE DE CÓDIGOS DE BARRAS
         // =========================================
         
         // 1. Regra Patrimônio (ex: 035.03.232)
-        const patrimonioRegex = /^\\d{3}\\.\\d{2}\\.\\d{3}$/;
+        const patrimonioRegex = /^\d{3}\.\d{2}\.\d{3}$/;
         
         // 2. Regra EAN (8 a 14 dígitos)
-        const eanRegex = /^\\d{8,14}$/;
+        const eanRegex = /^\d{8,14}$/;
         
         // 3. Regra Consul / Código Composto (ex: CRC08CBANAJJ6584955E3)
         const consulRegex = /^(CRC[A-Z0-9]{7})([A-Z0-9]{9})(.*)$/i;
         
         // 4. Regra Elgin - Série (começa com ARC)
-        const elginSerieRegex = /^ARC\\d+$/i;
+        const elginSerieRegex = /^ARC\d+$/i;
         
         // 5. Regra Elgin - Modelo (começa com KVF, etc)
         const elginModeloRegex = /^KVF[A-Z0-9]+$/i;
 
         if (patrimonioRegex.test(decodedText)) {
             inputPatrimonio.value = decodedText;
+            detectedPatrimonio = decodedText;
             typeFound = 'QR Code de Patrimônio lido!';
             
         } else if (consulRegex.test(decodedText)) {
             const match = decodedText.match(consulRegex);
             inputModelo.value = match[1]; // Modelo
             inputSerie.value = match[2];  // Série
+            detectedSerie = match[2];
             if (match[3]) {
                 const currentObs = inputObs.value;
                 inputObs.value = currentObs ? currentObs + ' / Lote: ' + match[3] : 'Lote: ' + match[3];
@@ -316,6 +444,7 @@ function onScanSuccess(decodedText, decodedResult) {
             
         } else if (elginSerieRegex.test(decodedText)) {
             inputSerie.value = decodedText;
+            detectedSerie = decodedText;
             typeFound = 'Série Elgin identificada!';
             
         } else if (elginModeloRegex.test(decodedText)) {
@@ -326,10 +455,18 @@ function onScanSuccess(decodedText, decodedResult) {
             inputEan.value = decodedText;
             typeFound = 'EAN lido!';
             
-            // Auto-preencher o modelo se existir na nossa base local (Lookup)
-            if (EAN_DB[decodedText]) {
-                inputModelo.value = EAN_DB[decodedText];
-                typeFound = 'EAN lido e Modelo auto-preenchido!';
+            // Auto-preencher o modelo se existir na nossa base inteligente (Lookup)
+            if (eanLookupDB[decodedText]) {
+                inputModelo.value = eanLookupDB[decodedText];
+                isAutofilled = true;
+                typeFound = `✨ EAN lido! Modelo "${eanLookupDB[decodedText]}" preenchido!`;
+                
+                inputModelo.classList.add('highlight-autofill');
+                if (modeloBadge) modeloBadge.style.display = 'inline-flex';
+                setTimeout(() => inputModelo.classList.remove('highlight-autofill'), 1500);
+            } else {
+                if (modeloBadge) modeloBadge.style.display = 'none';
+                typeFound = 'EAN lido! Digite o modelo 1x para o app aprender.';
             }
             
         } else {
@@ -340,13 +477,17 @@ function onScanSuccess(decodedText, decodedResult) {
         }
     }
     
-    feedbackText.innerText = typeFound;
-    
-    playBeepSound();
-    showFeedback();
-    
-    if (navigator.vibrate) {
-        navigator.vibrate(100);
+    // --- Verificação Instantânea de Duplicidade na Leitura ---
+    const duplicateWarning = checkDuplicateCode(detectedPatrimonio, detectedSerie);
+    if (duplicateWarning) {
+        showWarningFeedback(`⚠️ DUPLICIDADE: ${duplicateWarning}`);
+    } else {
+        feedbackText.innerText = typeFound;
+        playBeepSound();
+        showFeedback();
+        if (navigator.vibrate) {
+            navigator.vibrate(100);
+        }
     }
 
     // Ativar o Cooldown Global de 2 segundos
@@ -456,6 +597,9 @@ function resetForm() {
     inputQty.value = '1';
     editingItemId = null;
     
+    if (modeloBadge) modeloBadge.style.display = 'none';
+    inputModelo.classList.remove('highlight-autofill');
+    
     formTitle.innerText = 'Produto Atual';
     saveBtnText.innerText = 'Adicionar à Lista';
     saveIcon.className = 'fa-solid fa-plus';
@@ -494,21 +638,30 @@ function saveCurrentItem() {
         return;
     }
     
-    // --- Proteção contra Duplicidade ---
+    // --- Proteção contra Duplicidade com Confirmação Segura ---
     if ((serie || patrimonio) && !editingItemId) {
-        const isDuplicate = scannedItems.some(i => 
-            (serie && i.serie === serie) || 
-            (patrimonio && i.patrimonio === patrimonio)
-        );
-        
-        if (isDuplicate) {
-            alert("🛑 ATENÇÃO: Este produto (Série/Patrimônio) já foi bipado anteriormente e consta na sua lista!");
-            playBeepSound(); // Som extra opcional
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]); // Vibração de erro
-            return; // Bloqueia o salvamento
+        const dupWarning = checkDuplicateCode(patrimonio, serie);
+        if (dupWarning) {
+            playWarningSound();
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            
+            const proceed = confirm(`⚠️ ALERTA DE DUPLICIDADE:\n\n${dupWarning}\n\nDeseja salvar mesmo assim e enviar para a planilha?`);
+            if (!proceed) {
+                return; // Usuário optou por não duplicar
+            }
         }
     }
-    // -----------------------------------
+    // -----------------------------------------------------------
+    
+    // Auto-Aprender o Modelo com o EAN para as próximas leituras
+    if (ean && modelo) {
+        learnEanModel(ean, modelo);
+    }
+    
+    // Registrar no Histórico Permanente da máquina
+    if (patrimonio) scannedHistory.patrimonios[patrimonio.trim().toUpperCase()] = true;
+    if (serie) scannedHistory.series[serie.trim().toUpperCase()] = true;
+    saveHistory();
     
     if (editingItemId) {
         // Modo Edição de Item existente
@@ -706,29 +859,32 @@ function updateSyncAllButton() {
 }
 
 function updateGlobalSyncStatus() {
-    if (!globalSyncStatusEl) return;
+    if (!stickyStatusBar || !statusBarIcon || !statusBarText) return;
     
     const isOnline = navigator.onLine;
-    const hasPending = scannedItems.some(item => !item.synced);
+    const pendingCount = scannedItems.filter(item => !item.synced).length;
     
     // Reset de classes
-    globalSyncStatusEl.className = 'global-sync-status';
+    stickyStatusBar.className = 'sticky-status-bar';
     
     if (!isOnline) {
         // Sem internet
-        globalSyncStatusEl.classList.add('offline');
-        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i>';
-        globalSyncStatusEl.title = 'Offline (Sem Internet)';
-    } else if (hasPending) {
+        stickyStatusBar.classList.add('offline');
+        statusBarIcon.className = 'fa-solid fa-cloud-arrow-down';
+        statusBarText.innerText = `Modo Offline (${pendingCount} salvos no celular)`;
+        stickyStatusBar.title = 'Sem conexão de internet. Os itens estão salvos no celular.';
+    } else if (pendingCount > 0) {
         // Com internet, mas com itens pendentes
-        globalSyncStatusEl.classList.add('pending');
-        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i>';
-        globalSyncStatusEl.title = 'Online (Itens aguardando sincronização)';
+        stickyStatusBar.classList.add('pending');
+        statusBarIcon.className = 'fa-solid fa-cloud-arrow-up';
+        statusBarText.innerText = `${pendingCount} pendente(s) • Toque p/ sincronizar`;
+        stickyStatusBar.title = 'Clique para enviar todos os itens pendentes para o Google Sheets!';
     } else {
         // Com internet e tudo sincronizado
-        globalSyncStatusEl.classList.add('online');
-        globalSyncStatusEl.innerHTML = '<i class="fa-solid fa-cloud-check"></i>';
-        globalSyncStatusEl.title = 'Online (Sincronizado)';
+        stickyStatusBar.classList.add('online');
+        statusBarIcon.className = 'fa-solid fa-cloud-check';
+        statusBarText.innerText = 'Conectado & Sincronizado';
+        stickyStatusBar.title = 'Todos os itens estão 100% sincronizados com o Google Sheets!';
     }
 }
 
@@ -855,11 +1011,13 @@ function renderList() {
 
 let feedbackTimeout;
 let flashTimeout;
+
 function showFeedback() {
-    scanFeedback.classList.remove('hidden');
+    scanFeedback.classList.remove('hidden', 'warning');
     
     // Ativa o flash verde nas bordas da tela
     if (screenFlashOverlay) {
+        screenFlashOverlay.classList.remove('warning');
         screenFlashOverlay.classList.add('active');
         clearTimeout(flashTimeout);
         flashTimeout = setTimeout(() => {
@@ -870,7 +1028,33 @@ function showFeedback() {
     clearTimeout(feedbackTimeout);
     feedbackTimeout = setTimeout(() => {
         scanFeedback.classList.add('hidden');
-    }, 2000);
+    }, 2500);
+}
+
+function showWarningFeedback(msg) {
+    scanFeedback.classList.remove('hidden');
+    scanFeedback.classList.add('warning');
+    feedbackText.innerText = msg;
+    
+    if (screenFlashOverlay) {
+        screenFlashOverlay.classList.remove('active');
+        screenFlashOverlay.classList.add('warning');
+        clearTimeout(flashTimeout);
+        flashTimeout = setTimeout(() => {
+            screenFlashOverlay.classList.remove('warning');
+        }, 500);
+    }
+    
+    playWarningSound();
+    if (navigator.vibrate) {
+        navigator.vibrate([150, 80, 150]);
+    }
+    
+    clearTimeout(feedbackTimeout);
+    feedbackTimeout = setTimeout(() => {
+        scanFeedback.classList.remove('warning');
+        scanFeedback.classList.add('hidden');
+    }, 3500);
 }
 
 // --- Exportação e Cópia ---

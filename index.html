@@ -20,13 +20,16 @@
     <div id="screen-flash-overlay"></div>
 
     <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-        <h1><i class="fa-solid fa-barcode"></i> Leitor de Inventário</h1>
-        <div id="global-sync-status" class="global-sync-status" title="Status de Sincronização">
-            <i class="fa-solid fa-cloud-check"></i>
-        </div>
-    </header>
+        <!-- Header Fixo no Topo -->
+        <header class="app-header sticky-header">
+            <div class="header-top">
+                <h1><i class="fa-solid fa-barcode"></i> Leitor de Inventário</h1>
+            </div>
+            <div id="sticky-status-bar" class="sticky-status-bar online" title="Clique para sincronizar se houver itens pendentes">
+                <i id="status-bar-icon" class="fa-solid fa-cloud-check"></i>
+                <span id="status-bar-text">Conectado & Sincronizado</span>
+            </div>
+        </header>
 
         <!-- Área do Leitor -->
         <main class="scanner-section">
@@ -70,7 +73,7 @@
                 
                 <div class="form-row">
                     <div class="form-group" style="flex: 1;">
-                        <label for="current-modelo">Modelo</label>
+                        <label for="current-modelo">Modelo <span id="modelo-badge" class="badge-autofill" style="display: none;"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto</span></label>
                         <input type="text" id="current-modelo" placeholder="Ex: CRC08CBANA">
                     </div>
                     <div class="form-group" style="flex: 1;">

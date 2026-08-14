@@ -43,27 +43,64 @@ body {
     box-shadow: var(--shadow-lg);
 }
 
-/* Header */
-.app-header {
+/* Header Fixo e Barra de Status */
+.app-header.sticky-header {
     background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
     color: white;
-    padding: 1.25rem 1rem;
+    padding: 0.85rem 1rem;
     text-align: center;
-    border-radius: var(--radius-md) var(--radius-md) 0 0;
-    box-shadow: 0 4px 15px rgba(2, 132, 199, 0.2);
-    position: relative;
+    border-radius: 0;
+    box-shadow: 0 4px 15px rgba(2, 132, 199, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
+    gap: 0.4rem;
 }
 
-.app-header h1 {
-    font-size: 1.5rem;
+.header-top h1 {
+    font-size: 1.25rem;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    margin: 0;
+}
+
+.sticky-status-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: var(--radius-full);
+    font-size: 0.78rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    cursor: default;
+    user-select: none;
+}
+
+.sticky-status-bar.online {
+    background: rgba(16, 185, 129, 0.25);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    color: #ecfdf5;
+}
+
+.sticky-status-bar.pending {
+    background: rgba(245, 158, 11, 0.3);
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    color: #fffbeb;
+    cursor: pointer;
+    animation: pulse 1.5s infinite;
+}
+
+.sticky-status-bar.offline {
+    background: rgba(239, 68, 68, 0.3);
+    border: 1px solid rgba(239, 68, 68, 0.6);
+    color: #fef2f2;
 }
 
 /* Scanner Section */
@@ -227,6 +264,39 @@ body {
     opacity: 1;
 }
 
+#screen-flash-overlay.warning {
+    box-shadow: inset 0 0 0 10px #ef4444, inset 0 0 40px rgba(239, 68, 68, 0.85);
+    opacity: 1;
+}
+
+/* Badge de Auto-preenchimento */
+.badge-autofill {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    animation: popIn 0.3s ease;
+}
+
+@keyframes popIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* Destaque de input quando preenchido automaticamente */
+input.highlight-autofill {
+    border-color: #10b981 !important;
+    background-color: #ecfdf5 !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
+    transition: all 0.4s ease;
+}
+
 /* Feedback message */
 .feedback-message {
     background-color: #d1fae5;
@@ -241,6 +311,13 @@ body {
     opacity: 1;
     transform: translateY(0);
     transition: all 0.3s ease;
+    text-align: center;
+}
+
+.feedback-message.warning {
+    background-color: #fee2e2 !important;
+    color: #b91c1c !important;
+    border: 1px solid #ef4444;
 }
 
 .feedback-message.hidden {
@@ -543,23 +620,4 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-.global-sync-status {
-    position: absolute;
-    right: 1.25rem;
-    font-size: 1.3rem;
-    transition: color 0.3s;
-}
-
-.global-sync-status.online {
-    color: #a7f3d0; /* Verde clarinho */
-}
-
-.global-sync-status.offline {
-    color: #fecdd3; /* Vermelho clarinho */
-}
-
-.global-sync-status.pending {
-    color: #fde047; /* Amarelo clarinho */
 }
