@@ -86,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderList();
     setupEventListeners();
     updateGlobalSyncStatus();
+    fetchDataFromGoogleSheet(); // Puxa todos os itens e modelos da planilha em tempo real
 });
 
 function setupEventListeners() {
@@ -135,6 +136,7 @@ function setupEventListeners() {
     // Listeners de Conexão (Internet)
     window.addEventListener('online', () => {
         updateGlobalSyncStatus();
+        fetchDataFromGoogleSheet();
         syncAllPending(); // Tenta sincronizar automaticamente ao voltar a internet
     });
     window.addEventListener('offline', updateGlobalSyncStatus);
@@ -369,6 +371,54 @@ function saveHistory() {
         localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(scannedHistory));
     } catch (e) {
         console.error("Erro ao salvar histórico", e);
+    }
+}
+
+// Puxa toda a base da planilha do Google Sheets para o histórico e catálogo local
+async function fetchDataFromGoogleSheet() {
+    if (!WEBHOOK_URL) return;
+    try {
+        const response = await fetch(WEBHOOK_URL);
+        if (!response.ok) return;
+        const result = await response.json();
+        if (result && result.status === 'sucesso' && Array.isArray(result.data)) {
+            let loadedDuplicates = 0;
+            let loadedModels = 0;
+            
+            result.data.forEach(item => {
+                // 1. Carrega no histórico de duplicidades
+                if (item.patrimonio) {
+                    const normPat = item.patrimonio.trim().toUpperCase();
+                    if (!scannedHistory.patrimonios[normPat]) {
+                        scannedHistory.patrimonios[normPat] = true;
+                        loadedDuplicates++;
+                    }
+                }
+                if (item.serie) {
+                    const normSer = item.serie.trim().toUpperCase();
+                    if (!scannedHistory.series[normSer]) {
+                        scannedHistory.series[normSer] = true;
+                        loadedDuplicates++;
+                    }
+                }
+                
+                // 2. Aprende novos EAN -> Modelo diretamente da planilha
+                if (item.ean && item.modelo) {
+                    const eanClean = String(item.ean).trim();
+                    const modeloClean = String(item.modelo).trim();
+                    if (eanClean && modeloClean && !eanLookupDB[eanClean]) {
+                        eanLookupDB[eanClean] = modeloClean;
+                        loadedModels++;
+                    }
+                }
+            });
+            
+            saveHistory();
+            localStorage.setItem(STORAGE_LOOKUP_KEY, JSON.stringify(eanLookupDB));
+            console.log(`[Google Sheets Nuvem] ${result.data.length} itens sincronizados da planilha para proteção de duplicidade e lookup.`);
+        }
+    } catch (err) {
+        console.warn("Aviso: Não foi possível carregar planilha em segundo plano (offline ou método GET não configurado no Apps Script):", err);
     }
 }
 
