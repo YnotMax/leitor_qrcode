@@ -15,6 +15,7 @@ const INITIAL_EAN_CATALOG = {
 
 let eanLookupDB = {};
 let scannedHistory = { patrimonios: {}, series: {} };
+let systemStockDB = { byPatrimonio: {}, bySerie: {} };
 
 let html5QrCode = null;
 let isScanning = false;
@@ -82,6 +83,7 @@ const saveIcon = document.getElementById('save-icon');
 document.addEventListener('DOMContentLoaded', () => {
     loadLookupDB();
     loadHistory();
+    loadSystemStockDB();
     loadItems();
     renderList();
     setupEventListeners();
@@ -374,51 +376,67 @@ function saveHistory() {
     }
 }
 
-// Puxa toda a base da planilha do Google Sheets para o histórico e catálogo local
+function loadSystemStockDB() {
+    try {
+        const saved = localStorage.getItem('inventario_sistema_db');
+        if (saved) {
+            systemStockDB = JSON.parse(saved);
+        }
+    } catch (e) {
+        systemStockDB = { byPatrimonio: {}, bySerie: {} };
+    }
+}
+
+// Puxa toda a base da planilha do Google Sheets para o histórico, catálogo e estoque do sistema
 async function fetchDataFromGoogleSheet() {
     if (!WEBHOOK_URL) return;
     try {
         const response = await fetch(WEBHOOK_URL);
         if (!response.ok) return;
         const result = await response.json();
-        if (result && result.status === 'sucesso' && Array.isArray(result.data)) {
-            let loadedDuplicates = 0;
-            let loadedModels = 0;
-            
-            result.data.forEach(item => {
-                // 1. Carrega no histórico de duplicidades
-                if (item.patrimonio) {
-                    const normPat = item.patrimonio.trim().toUpperCase();
-                    if (!scannedHistory.patrimonios[normPat]) {
+        if (result && result.status === 'sucesso') {
+            // 1. Processa dados da aba 'estoque fisico'
+            if (Array.isArray(result.data)) {
+                result.data.forEach(item => {
+                    if (item.patrimonio) {
+                        const normPat = item.patrimonio.trim().toUpperCase();
                         scannedHistory.patrimonios[normPat] = true;
-                        loadedDuplicates++;
                     }
-                }
-                if (item.serie) {
-                    const normSer = item.serie.trim().toUpperCase();
-                    if (!scannedHistory.series[normSer]) {
+                    if (item.serie) {
+                        const normSer = item.serie.trim().toUpperCase();
                         scannedHistory.series[normSer] = true;
-                        loadedDuplicates++;
                     }
-                }
-                
-                // 2. Aprende novos EAN -> Modelo diretamente da planilha
-                if (item.ean && item.modelo) {
-                    const eanClean = String(item.ean).trim();
-                    const modeloClean = String(item.modelo).trim();
-                    if (eanClean && modeloClean && !eanLookupDB[eanClean]) {
-                        eanLookupDB[eanClean] = modeloClean;
-                        loadedModels++;
+                    if (item.ean && item.modelo) {
+                        const eanClean = String(item.ean).trim();
+                        const modeloClean = String(item.modelo).trim();
+                        if (eanClean && modeloClean && !eanLookupDB[eanClean]) {
+                            eanLookupDB[eanClean] = modeloClean;
+                        }
                     }
-                }
-            });
+                });
+            }
+            
+            // 2. Processa dados da aba 'estoque sistema aparelhos' (Cadastro ERP)
+            if (Array.isArray(result.sistema)) {
+                result.sistema.forEach(sys => {
+                    if (sys.etiqueta) {
+                        const normEtq = sys.etiqueta.trim().toUpperCase();
+                        systemStockDB.byPatrimonio[normEtq] = sys;
+                    }
+                    if (sys.serie) {
+                        const normSer = sys.serie.trim().toUpperCase();
+                        systemStockDB.bySerie[normSer] = sys;
+                    }
+                });
+                localStorage.setItem('inventario_sistema_db', JSON.stringify(systemStockDB));
+            }
             
             saveHistory();
             localStorage.setItem(STORAGE_LOOKUP_KEY, JSON.stringify(eanLookupDB));
-            console.log(`[Google Sheets Nuvem] ${result.data.length} itens sincronizados da planilha para proteção de duplicidade e lookup.`);
+            console.log(`[Google Sheets] Sincronizados ${result.total || 0} itens físicos e ${result.totalSistema || 0} itens do sistema.`);
         }
     } catch (err) {
-        console.warn("Aviso: Não foi possível carregar planilha em segundo plano (offline ou método GET não configurado no Apps Script):", err);
+        console.warn("Aviso: Não foi possível carregar dados da planilha online:", err);
     }
 }
 
@@ -523,6 +541,21 @@ function onScanSuccess(decodedText, decodedResult) {
             detectedPatrimonio = decodedText;
             typeFound = 'QR Code de Patrimônio lido!';
             
+            // Busca no Estoque do Sistema por Patrimônio (UltimaEtiqueta)
+            const sysItem = systemStockDB.byPatrimonio[decodedText.trim().toUpperCase()];
+            if (sysItem) {
+                if (sysItem.material && !inputModelo.value) {
+                    inputModelo.value = sysItem.material;
+                    inputModelo.classList.add('highlight-autofill');
+                    if (modeloBadge) modeloBadge.style.display = 'inline-flex';
+                    setTimeout(() => inputModelo.classList.remove('highlight-autofill'), 1500);
+                }
+                if (sysItem.serie && !inputSerie.value) {
+                    inputSerie.value = sysItem.serie;
+                }
+                typeFound = `✨ Máquina no Sistema: ${sysItem.material || ''}`;
+            }
+            
         } else if (consulRegex.test(decodedText)) {
             const match = decodedText.match(consulRegex);
             inputModelo.value = match[1]; // Modelo
@@ -538,6 +571,21 @@ function onScanSuccess(decodedText, decodedResult) {
             inputSerie.value = decodedText;
             detectedSerie = decodedText;
             typeFound = 'Série Elgin identificada!';
+            
+            // Busca no Estoque do Sistema por Série
+            const sysItem = systemStockDB.bySerie[decodedText.trim().toUpperCase()];
+            if (sysItem) {
+                if (sysItem.material && !inputModelo.value) {
+                    inputModelo.value = sysItem.material;
+                    inputModelo.classList.add('highlight-autofill');
+                    if (modeloBadge) modeloBadge.style.display = 'inline-flex';
+                    setTimeout(() => inputModelo.classList.remove('highlight-autofill'), 1500);
+                }
+                if (sysItem.etiqueta && !inputPatrimonio.value) {
+                    inputPatrimonio.value = sysItem.etiqueta;
+                }
+                typeFound = `✨ Série no Sistema: ${sysItem.material || ''}`;
+            }
             
         } else if (elginModeloRegex.test(decodedText)) {
             inputModelo.value = decodedText;
