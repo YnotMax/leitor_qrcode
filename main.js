@@ -464,6 +464,33 @@ function checkDuplicateCode(patrimonio, serie) {
     return null;
 }
 
+// Checa se a combinação Patrimônio (QR) + Número de Série bate com o cadastro do sistema
+function checkSystemDivergence(patrimonio, serie) {
+    if (!patrimonio || !serie) return null;
+    const normPat = patrimonio.trim().toUpperCase();
+    const normSer = serie.trim().toUpperCase();
+    
+    // 1. Checa se o Patrimônio existe no sistema e tem outra Série cadastrada
+    const sysByPat = systemStockDB.byPatrimonio[normPat];
+    if (sysByPat && sysByPat.serie) {
+        const expectedSerie = sysByPat.serie.trim().toUpperCase();
+        if (expectedSerie !== normSer) {
+            return `No sistema, a Etiqueta ${patrimonio} pertence à Série ${sysByPat.serie}, mas você bipou a Série ${serie}!`;
+        }
+    }
+    
+    // 2. Checa se a Série existe no sistema e tem outra Etiqueta cadastrada
+    const sysBySer = systemStockDB.bySerie[normSer];
+    if (sysBySer && sysBySer.etiqueta) {
+        const expectedPat = sysBySer.etiqueta.trim().toUpperCase();
+        if (expectedPat !== normPat) {
+            return `No sistema, a Série ${serie} pertence à Etiqueta ${sysBySer.etiqueta}, mas você bipou a Etiqueta ${patrimonio}!`;
+        }
+    }
+    
+    return null;
+}
+
 function onScanSuccess(decodedText, decodedResult) {
     if (isCoolingDown) return;
 
@@ -617,10 +644,14 @@ function onScanSuccess(decodedText, decodedResult) {
         }
     }
     
-    // --- Verificação Instantânea de Duplicidade na Leitura ---
+    // --- Verificação Instantânea de Duplicidade e Divergência na Leitura ---
     const duplicateWarning = checkDuplicateCode(detectedPatrimonio, detectedSerie);
+    const divergenceWarning = checkSystemDivergence(inputPatrimonio.value, inputSerie.value);
+    
     if (duplicateWarning) {
         showWarningFeedback(`⚠️ DUPLICIDADE DETECTADA`, duplicateWarning);
+    } else if (divergenceWarning) {
+        showWarningFeedback(`⚠️ DIVERGÊNCIA DE ETIQUETA / SÉRIE`, divergenceWarning);
     } else {
         feedbackText.innerText = typeFound;
         playBeepSound();
@@ -772,7 +803,7 @@ function saveCurrentItem() {
     const modelo = inputModelo.value.trim();
     const serie = inputSerie.value.trim();
     const ean = inputEan.value.trim();
-    const obs = inputObs.value.trim();
+    let obs = inputObs.value.trim(); // BUG FIX: era 'const', mas precisava ser reatribuída para anotar divergência
     const qty = parseInt(inputQty.value) || 1;
     
     if (!patrimonio && !modelo && !serie && !ean) {
@@ -794,6 +825,24 @@ function saveCurrentItem() {
         }
     }
     // -----------------------------------------------------------
+    
+    // --- Verificação de Divergência Cadastral (Série vs Etiqueta) ---
+    if (patrimonio && serie && !editingItemId) {
+        const divWarning = checkSystemDivergence(patrimonio, serie);
+        if (divWarning) {
+            playWarningSound();
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+            
+            const proceed = confirm(`⚠️ ALERTA DE DIVERGÊNCIA CADASTRAL:\n\n${divWarning}\n\nDeseja salvar mesmo assim com essa divergência?`);
+            if (!proceed) {
+                return;
+            }
+            if (!obs.includes('DIVERGÊNCIA')) {
+                obs = obs ? `${obs} / [DIVERGÊNCIA SÉRIE/ETIQUETA]` : '[DIVERGÊNCIA SÉRIE/ETIQUETA]';
+            }
+        }
+    }
+    // ---------------------------------------------------------------
     
     // Auto-Aprender o Modelo com o EAN para as próximas leituras
     if (ean && modelo) {
@@ -866,8 +915,10 @@ function saveCurrentItem() {
         feedbackText.innerText = 'Produto adicionado!';
     }
     
-    // Pegar o item recém salvo/editado para enviar
-    const currentItemToSend = scannedItems[0];
+    // Pegar o item correto para enviar (antes do resetForm que zera editingItemId)
+    const currentItemToSend = editingItemId
+        ? scannedItems.find(i => i.id === editingItemId) || scannedItems[0]
+        : scannedItems[0];
     
     resetForm();
     saveItems();
