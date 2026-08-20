@@ -864,6 +864,7 @@ function saveCurrentItem() {
             scannedItems[itemIndex].ean = ean;
             scannedItems[itemIndex].obs = obs;
             scannedItems[itemIndex].quantity = qty;
+            scannedItems[itemIndex].synced = false; // Precisa re-sincronizar
         }
         feedbackText.innerText = 'Produto atualizado!';
     } else {
@@ -920,23 +921,32 @@ function saveCurrentItem() {
         ? scannedItems.find(i => i.id === editingItemId) || scannedItems[0]
         : scannedItems[0];
     
+    // Se é edição, sinalizar para o Apps Script que deve ATUALIZAR e não duplicar
+    const isUpdate = !!editingItemId;
+    
     resetForm();
     saveItems();
     renderList();
     showFeedback();
     
-    // Envio para Nuvem (Webhook)
-    syncToWebhook(currentItemToSend);
+    // Envio para Nuvem (Webhook) — com flag de atualização se for edição
+    syncToWebhook(currentItemToSend, isUpdate);
 }
 
 // --- Integração Nuvem ---
-async function syncToWebhook(item) {
+async function syncToWebhook(item, isUpdate) {
     if (!WEBHOOK_URL) return;
     
     // UI Update visual instantâneo para "syncing"
     const syncStatusEl = document.getElementById(`sync-icon-${item.id}`);
     if (syncStatusEl) {
         syncStatusEl.className = 'fa-solid fa-cloud-arrow-up sync-status syncing';
+    }
+    
+    // Monta o payload com a flag de atualização
+    const payload = { ...item };
+    if (isUpdate) {
+        payload.isUpdate = true;
     }
     
     try {
@@ -946,7 +956,7 @@ async function syncToWebhook(item) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(item)
+            body: JSON.stringify(payload)
         });
         
         // Se a requisição não lançou erro (Network Error), assumimos que chegou com sucesso!
